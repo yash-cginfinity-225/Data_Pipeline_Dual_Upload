@@ -1,0 +1,66 @@
+CREATE STORAGE INTEGRATION azure_integration
+TYPE = EXTERNAL_STAGE
+STORAGE_PROVIDER = AZURE
+ENABLED = TRUE
+AZURE_TENANT_ID = '******'
+STORAGE_ALLOWED_LOCATIONS = ('azure://file.blob.core.windows.net/mycontainer');
+
+DESC STORAGE integration azure_integration;
+
+USE my_db;
+
+CREATE OR REPLACE FILE FORMAT my_db.public.fileformat_azure
+  TYPE = CSV
+  FIELD_DELIMITER = ','
+  SKIP_HEADER = 1
+  FIELD_OPTIONALLY_ENCLOSED_BY = '"';
+
+CREATE OR REPLACE STAGE my_db.public.stage_azure
+  STORAGE_INTEGRATION = azure_integration
+  URL = 'azure://file.blob.core.windows.net/mycontainer'
+  FILE_FORMAT = fileformat_azure;
+
+LIST @my_db.public.stage_azure;
+
+CREATE OR REPLACE TABLE laptops (
+  Title STRING,
+  Price STRING,
+  Description STRING
+);
+
+COPY INTO laptops
+FROM @my_db.public.stage_azure/laptops.csv
+FILE_FORMAT = (FORMAT_NAME = 'my_db.public.fileformat_azure');
+
+COPY INTO art
+FROM @my_db.public.stage_azure/artworks.csv;
+
+SELECT * FROM laptops;
+SELECT * FROM art;
+
+
+CREATE OR REPLACE VIEW my_db.public.laptop_art_view AS
+WITH laptops_ranked AS (
+  SELECT *, ROW_NUMBER() OVER (ORDER BY Title) AS rn FROM laptops
+),
+art_ranked AS (
+  SELECT *, ROW_NUMBER() OVER (ORDER BY TITLE) AS rn FROM art
+)
+SELECT
+  l.Title AS Laptop_Title,
+  l.Price,
+  l.Description,
+  a.ID AS Art_ID,
+  a.TITLE AS Art_Title,
+  a.ARTIST_DISPLAY,
+  a.DATE_DISPLAY,
+  a.MEDIUM_DISPLAY,
+  a.IMAGE_URL
+FROM
+  laptops_ranked l
+JOIN
+  art_ranked a
+ON
+  l.rn = a.rn;
+
+  SELECT * FROM my_db.public.laptop_art_view;
